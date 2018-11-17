@@ -1,6 +1,5 @@
-# -*- coding: utf-8 -*-
 # © 2011-2017 Akretion (http://www.akretion.com)
-# © 2009-2017 Noviat (http://www.noviat.com)
+# © 2009-2018 Noviat (http://www.noviat.com)
 # @author Alexis de Lattre <alexis.delattre@akretion.com>
 # @author Luc de Meyer <info@noviat.com>
 
@@ -12,6 +11,10 @@ class IntrastatTransportMode(models.Model):
     _description = "Intrastat Transport Mode"
     _rec_name = 'display_name'
     _order = 'code'
+    _sql_constraints = [(
+        'intrastat_transport_code_unique',
+        'UNIQUE(code)',
+        'Code must be unique.')]
 
     display_name = fields.Char(
         string='Display Name', compute='_display_name', store=True,
@@ -25,8 +28,3 @@ class IntrastatTransportMode(models.Model):
     def _display_name(self):
         for this in self:
             this.display_name = '%s. %s' % (this.code, this.name)
-
-    _sql_constraints = [(
-        'intrastat_transport_code_unique',
-        'UNIQUE(code)',
-        'Code must be unique.')]

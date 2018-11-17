@@ -51,7 +51,8 @@
                     <label for="intrastat_accessory_costs" class="col-md-5 o_light_label"/>
                     <field name="intrastat_accessory_costs"/>
 
-                    <field name="intrastat_region_id" invisible="1"/>
+                    <field name="country_id" invisible="1"/>
+                    <field name="intrastat_region_id" domain="[('country_id','=', country_id)]" invisible="1"/>
                 </div>
             </xpath>
 

@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
 # © 2017 Akretion (Alexis de Lattre <alexis.delattre@akretion.com>)
+# © 2009-2018 Noviat (http://www.noviat.com)
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl.html).
 
 from odoo import models, fields
@@ -29,3 +29,5 @@ class ResConfigSettings(models.TransientModel):
         related='company_id.intrastat_transaction_in_refund')
     intrastat_accessory_costs = fields.Boolean(
         related='company_id.intrastat_accessory_costs')
+    country_id = fields.Many2one(
+        related='company_id.country_id', readonly=True)

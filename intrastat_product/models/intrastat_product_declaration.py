@@ -1,6 +1,5 @@
-# -*- coding: utf-8 -*-
 # © 2011-2017 Akretion (http://www.akretion.com)
-# © 2009-2017 Noviat (http://www.noviat.com)
+# © 2009-2018 Noviat (http://www.noviat.com)
 # @author Alexis de Lattre <alexis.delattre@akretion.com>
 # @author Luc de Meyer <info@noviat.com>
 
@@ -19,6 +18,111 @@ class IntrastatProductDeclaration(models.Model):
     _rec_name = 'year_month'
     _inherit = ['mail.thread', 'intrastat.common']
     _order = 'year_month desc, type, revision'
+    _sql_constraints = [
+        ('date_uniq',
+         'unique(year_month, company_id, type, revision)',
+         "A declaration of the same type already exists for this month !"
+         "\nYou should update the existing declaration "
+         "or change the revision number of this one."),
+    ]
+
+    @api.model
+    def _default_year(self):
+        if datetime.now().month == 1:
+            year = datetime.now().year - 1
+        else:
+            year = datetime.now().year
+        return str(year)
+
+    @api.model
+    def _default_month(self):
+        if datetime.now().month == 1:
+            return 12
+        else:
+            return datetime.now().month - 1
+
+    @api.model
+    def _default_action(self):
+        return 'replace'
+
+    company_id = fields.Many2one(
+        comodel_name='res.company', string='Company', readonly=True,
+        default=lambda self: self.env['res.company']._company_default_get(
+            'intrastat.product.declaration'))
+    company_country_code = fields.Char(
+        compute='_compute_company_country_code',
+        string='Company Country Code', readonly=True, store=True,
+        help="Used in views and methods of localization modules.")
+    year = fields.Char(
+        string='Year', required=True,
+        default=lambda self: self._default_year())
+    month = fields.Selection([
+        (1, '01'),
+        (2, '02'),
+        (3, '03'),
+        (4, '04'),
+        (5, '05'),
+        (6, '06'),
+        (7, '07'),
+        (8, '08'),
+        (9, '09'),
+        (10, '10'),
+        (11, '11'),
+        (12, '12')
+    ], string='Month', required=True,
+        default=lambda self: self._default_month())
+    year_month = fields.Char(
+        compute='_compute_year_month', string='Period', readonly=True,
+        track_visibility='onchange', store=True,
+        help="Year and month of the declaration.")
+    type = fields.Selection(
+        selection='_get_type', string='Type', required=True,
+        states={'done': [('readonly', True)]},
+        track_visibility='onchange', help="Select the declaration type.")
+    action = fields.Selection(
+        selection='_get_action',
+        string='Action', required=True,
+        default=lambda self: self._default_action(),
+        states={'done': [('readonly', True)]},
+        track_visibility='onchange')
+    revision = fields.Integer(
+        string='Revision', default=1,
+        states={'done': [('readonly', True)]},
+        help="Used to keep track of changes")
+    computation_line_ids = fields.One2many(
+        comodel_name='intrastat.product.computation.line',
+        inverse_name='parent_id',
+        string='Intrastat Product Computation Lines',
+        states={'done': [('readonly', True)]})
+    declaration_line_ids = fields.One2many(
+        comodel_name='intrastat.product.declaration.line',
+        inverse_name='parent_id', string='Intrastat Product Declaration Lines',
+        states={'done': [('readonly', True)]})
+    num_decl_lines = fields.Integer(
+        compute='_compute_numbers', string='Number of Declaration Lines',
+        store=True, track_visibility='onchange')
+    total_amount = fields.Integer(
+        compute='_compute_numbers', string='Total Fiscal Amount', store=True,
+        help="Total fiscal amount in company currency of the declaration.")
+    currency_id = fields.Many2one(
+        'res.currency', related='company_id.currency_id', readonly=True,
+        string='Currency')
+    state = fields.Selection(
+        selection=[('draft', 'Draft'),
+                   ('done', 'Done')],
+        string='State', readonly=True, track_visibility='onchange',
+        copy=False, default='draft',
+        help="State of the declaration. When the state is set to 'Done', "
+        "the parameters become read-only.")
+    note = fields.Text(
+        string='Notes',
+        help="You can add some comments here if you want.")
+    reporting_level = fields.Selection(
+        selection='_get_reporting_level',
+        string='Reporting Level')
+    valid = fields.Boolean(
+        compute='_compute_check_validity',
+        string='Valid')
 
     @api.model
     def _get_type(self):
@@ -38,139 +142,12 @@ class IntrastatProductDeclaration(models.Model):
             ('standard', _('Standard')),
             ('extended', _('Extended'))]
 
-    @api.onchange('type')
-    def _onchange_type(self):
-        if self.type == 'arrivals':
-            self.reporting_level = \
-                self.company_id.intrastat_arrivals == 'extended' \
-                and 'extended' or 'standard'
-        if self.type == 'dispatches':
-            self.reporting_level = \
-                self.company_id.intrastat_dispatches == 'extended' \
-                and 'extended' or 'standard'
-
-    @api.model
-    def _get_company(self):
-        return self.env.user.company_id
-
-    @api.model
-    def _get_year(self):
-        if datetime.now().month == 1:
-            return datetime.now().year - 1
-        else:
-            return datetime.now().year
-
-    @api.model
-    def _get_month(self):
-        if datetime.now().month == 1:
-            return 12
-        else:
-            return datetime.now().month - 1
-
     @api.model
     def _get_action(self):
         return [
             ('replace', 'Replace'),
             ('append', 'Append'),
             ('nihil', 'Nihil')]
-
-    @api.model
-    def _get_default_action(self):
-        return 'replace'
-
-    company_id = fields.Many2one(
-        'res.company', string='Company', readonly=True,
-        default=lambda self: self.env['res.company']._company_default_get(
-            'intrastat.product.declaration'))
-    company_country_code = fields.Char(
-        compute='_compute_company_country_code',
-        string='Company Country Code', readonly=True, store=True,
-        help="Used in views and methods of localization modules.")
-    year = fields.Integer(
-        string='Year', required=True,
-        default=_get_year)
-    month = fields.Selection([
-        (1, '01'),
-        (2, '02'),
-        (3, '03'),
-        (4, '04'),
-        (5, '05'),
-        (6, '06'),
-        (7, '07'),
-        (8, '08'),
-        (9, '09'),
-        (10, '10'),
-        (11, '11'),
-        (12, '12')
-    ], string='Month', required=True,
-        default=_get_month)
-    year_month = fields.Char(
-        compute='_compute_year_month', string='Period', readonly=True,
-        track_visibility='onchange', store=True,
-        help="Year and month of the declaration.")
-    type = fields.Selection(
-        '_get_type', string='Type', required=True,
-        states={'done': [('readonly', True)]},
-        track_visibility='onchange', help="Select the declaration type.")
-    action = fields.Selection(
-        '_get_action',
-        string='Action', required=True,
-        default=_get_default_action,
-        states={'done': [('readonly', True)]},
-        track_visibility='onchange')
-    revision = fields.Integer(
-        string='Revision', default=1,
-        states={'done': [('readonly', True)]},
-        help="Used to keep track of changes")
-    computation_line_ids = fields.One2many(
-        'intrastat.product.computation.line',
-        'parent_id', string='Intrastat Product Computation Lines',
-        states={'done': [('readonly', True)]})
-    declaration_line_ids = fields.One2many(
-        'intrastat.product.declaration.line',
-        'parent_id', string='Intrastat Product Declaration Lines',
-        states={'done': [('readonly', True)]})
-    num_decl_lines = fields.Integer(
-        compute='_compute_numbers', string='Number of Declaration Lines',
-        store=True, track_visibility='onchange')
-    total_amount = fields.Integer(
-        compute='_compute_numbers', string='Total Fiscal Amount', store=True,
-        help="Total fiscal amount in company currency of the declaration.")
-    currency_id = fields.Many2one(
-        'res.currency', related='company_id.currency_id', readonly=True,
-        string='Currency')
-    state = fields.Selection([
-        ('draft', 'Draft'),
-        ('done', 'Done'),
-    ], string='State', readonly=True, track_visibility='onchange',
-        copy=False, default='draft',
-        help="State of the declaration. When the state is set to 'Done', "
-        "the parameters become read-only.")
-    note = fields.Text(
-        string='Notes',
-        help="You can add some comments here if you want.")
-    reporting_level = fields.Selection(
-        '_get_reporting_level',
-        string='Reporting Level')
-    valid = fields.Boolean(
-        compute='_check_validity',
-        string='Valid')
-
-    @api.model
-    @api.constrains('year')
-    def _check_year(self):
-        for this in self:
-            s = str(this.year)
-            if len(s) != 4 or s[0] != '2':
-                raise ValidationError(_("Invalid Year !"))
-
-    _sql_constraints = [
-        ('date_uniq',
-         'unique(year_month, company_id, type, revision)',
-         "A declaration of the same type already exists for this month !"
-         "\nYou should update the existing declaration "
-         "or change the revision number of this one."),
-    ]
 
     @api.multi
     @api.depends('company_id')
@@ -189,14 +166,32 @@ class IntrastatProductDeclaration(models.Model):
         for this in self:
             if this.year and this.month:
                 this.year_month = '-'.join(
-                    [str(this.year), format(this.month, '02')])
+                    [this.year, format(this.month, '02')])
 
     @api.multi
     @api.depends('month')
-    def _check_validity(self):
+    def _compute_check_validity(self):
         """ TO DO: logic based upon computation lines """
         for this in self:
             this.valid = True
+
+    @api.model
+    @api.constrains('year')
+    def _check_year(self):
+        for this in self:
+            if len(this.year) != 4 or this.year[0] != '2':
+                raise ValidationError(_("Invalid Year !"))
+
+    @api.onchange('type')
+    def _onchange_type(self):
+        if self.type == 'arrivals':
+            self.reporting_level = \
+                self.company_id.intrastat_arrivals == 'extended' \
+                and 'extended' or 'standard'
+        if self.type == 'dispatches':
+            self.reporting_level = \
+                self.company_id.intrastat_dispatches == 'extended' \
+                and 'extended' or 'standard'
 
     @api.multi
     def copy(self, default=None):
@@ -205,11 +200,11 @@ class IntrastatProductDeclaration(models.Model):
         default['revision'] = self.revision + 1
         return super(IntrastatProductDeclaration, self).copy(default)
 
-    def _company_warning(self, msg):
-        action = self.env.ref('base.action_res_company_form')
+    def _account_config_warning(self, msg):
+        action = self.env.ref('account.action_account_config')
         raise RedirectWarning(
             msg, action.id,
-            _('Go to company configuration screen'))
+            _('Go to Accounting Configuration Settings screen'))
 
     def _get_partner_country(self, inv_line):
         country = inv_line.invoice_id.src_dest_country_id \
@@ -293,7 +288,7 @@ class IntrastatProductDeclaration(models.Model):
         elif source_uom.category_id == pce_uom_categ:
             if not product.weight:  # re-create weight_net ?
                 note = "\n" + _(
-                    "Missing net weight on product %s."
+                    "Missing weight on product %s."
                 ) % product.name_get()[0][1]
                 note += "\n" + _(
                     "Please correct the product record and regenerate "
@@ -356,7 +351,7 @@ class IntrastatProductDeclaration(models.Model):
                 [('invoice_lines', 'in', inv_line.id)])
             if po_lines:
                 if po_lines[0].move_ids:
-                    region = po_lines[0].move_ids[0].location_id\
+                    region = po_lines[0].move_ids[0].location_dest_id\
                         .get_intrastat_region()
         elif inv_type in ('out_invoice', 'out_refund'):
             so_lines = self.env['sale.order.line'].search(
@@ -377,7 +372,7 @@ class IntrastatProductDeclaration(models.Model):
                 "The default Intrastat Transport Mode "
                 "of the Company is not set, "
                 "please configure it first.")
-            self._company_warning(msg)
+            self._account_config_warning(msg)
         return transport
 
     def _get_incoterm(self, inv_line):
@@ -388,7 +383,7 @@ class IntrastatProductDeclaration(models.Model):
                 "The default Incoterm "
                 "of the Company is not set, "
                 "please configure it first.")
-            self._company_warning(msg)
+            self._account_config_warning(msg)
         return incoterm
 
     def _get_product_origin_country(self, inv_line):
@@ -433,7 +428,7 @@ class IntrastatProductDeclaration(models.Model):
         with the country-specific logic for arrivals and dispatches.
         Cf. l10n_be_intrastat_product_declaration for an example
         """
-        start_date = date(self.year, self.month, 1)
+        start_date = date(int(self.year), self.month, 1)
         end_date = start_date + relativedelta(day=1, months=+1, days=-1)
         domain = [
             ('date_invoice', '>=', start_date),
@@ -523,7 +518,7 @@ class IntrastatProductDeclaration(models.Model):
                         continue
                 else:
                     _logger.info(
-                        'Skipping invoice line %s qty %s'
+                        'Skipping invoice line %s qty %s '
                         'of invoice %s. Reason: no product nor hs_code'
                         % (inv_line.name, inv_line.quantity, invoice.number))
                     continue
@@ -606,7 +601,7 @@ class IntrastatProductDeclaration(models.Model):
     @api.multi
     def action_gather(self):
         self.ensure_one()
-        self.message_post(_("Generate Lines from Invoices"))
+        self.message_post(body=_("Generate Lines from Invoices"))
         self._check_generate_lines()
         self._note = ''
         if (
@@ -718,7 +713,7 @@ class IntrastatProductDeclaration(models.Model):
         """ generate declaration lines """
         self.ensure_one()
         assert self.valid, 'Computation lines are not valid'
-        self.message_post(_("Generate Declaration Lines"))
+        self.message_post(body=_("Generate Declaration Lines"))
         # Delete existing declaration lines
         self.declaration_line_ids.unlink()
         # Regenerate declaration lines from computation lines
@@ -741,7 +736,7 @@ class IntrastatProductDeclaration(models.Model):
     def generate_xml(self):
         """ generate the INTRASTAT Declaration XML file """
         self.ensure_one()
-        self.message_post(_("Generate XML Declaration File"))
+        self.message_post(body=_("Generate XML Declaration File"))
         self._check_generate_xml()
         self._unlink_attachments()
         xml_string = self._generate_xml()
@@ -752,6 +747,52 @@ class IntrastatProductDeclaration(models.Model):
         else:
             raise UserError(
                 _("No XML File has been generated."))
+
+    @api.multi
+    def create_xls(self):
+        if self.env.context.get('computation_lines'):
+            report_file = 'instrastat_transactions'
+        else:
+            report_file = 'instrastat_declaration_lines'
+        return {
+            'type': 'ir.actions.report',
+            'report_type': 'xlsx',
+            'report_name': 'intrastat_product.product_declaration_xls',
+            'context': dict(self.env.context, report_file=report_file),
+            'data': {'dynamic_report': True},
+        }
+
+    @api.model
+    def _xls_computation_line_fields(self):
+        """
+        Update list in custom module to add/drop columns or change order
+        """
+        return [
+            'product', 'product_origin_country',
+            'hs_code', 'src_dest_country',
+            'amount_company_currency', 'accessory_cost',
+            'transaction', 'weight', 'suppl_unit_qty', 'suppl_unit',
+            'transport', 'invoice',
+        ]
+
+    @api.model
+    def _xls_declaration_line_fields(self):
+        """
+        Update list in custom module to add/drop columns or change order
+        """
+        return [
+            'hs_code', 'src_dest_country', 'amount_company_currency',
+            'transaction', 'weight', 'suppl_unit_qty', 'suppl_unit',
+            'transport',
+        ]
+
+    @api.model
+    def _xls_template(self):
+        """
+        Placeholder for excel report template updates
+
+        """
+        return {}
 
     @api.multi
     def done(self):
@@ -785,7 +826,7 @@ class IntrastatProductComputationLine(models.Model):
         string='Reporting Level',
         readonly=True)
     valid = fields.Boolean(
-        compute='_check_validity',
+        compute='_compute_check_validity',
         string='Valid')
     invoice_line_id = fields.Many2one(
         'account.invoice.line', string='Invoice Line', readonly=True)
@@ -844,7 +885,7 @@ class IntrastatProductComputationLine(models.Model):
 
     @api.multi
     @api.depends('transport_id')
-    def _check_validity(self):
+    def _compute_check_validity(self):
         """ TO DO: logic based upon fields """
         for this in self:
             this.valid = True
@@ -860,7 +901,7 @@ class IntrastatProductComputationLine(models.Model):
             self.intrastat_unit_id =\
                 self.product_id.intrastat_id.intrastat_unit_id
             if not self.intrastat_unit_id:
-                self.weight = self.product_id.weight_net
+                self.weight = self.product_id.weight
 
 
 class IntrastatProductDeclarationLine(models.Model):
