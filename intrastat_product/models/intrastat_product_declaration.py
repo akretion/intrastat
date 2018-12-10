@@ -86,8 +86,8 @@ class IntrastatProductDeclaration(models.Model):
         string='Company Country Code', readonly=True, store=True,
         help="Used in views and methods of localization modules.")
     year = fields.Integer(
-        string='Year', required=True,
-        default=_get_year)
+        string='Year', required=True, default=_get_year,
+        states={'done': [('readonly', True)]})
     month = fields.Selection([
         (1, '01'),
         (2, '02'),
@@ -101,8 +101,8 @@ class IntrastatProductDeclaration(models.Model):
         (10, '10'),
         (11, '11'),
         (12, '12')
-    ], string='Month', required=True,
-        default=_get_month)
+        ], string='Month', required=True, default=_get_month,
+        states={'done': [('readonly', True)]})
     year_month = fields.Char(
         compute='_compute_year_month', string='Period', readonly=True,
         track_visibility='onchange', store=True,
@@ -141,7 +141,7 @@ class IntrastatProductDeclaration(models.Model):
     state = fields.Selection([
         ('draft', 'Draft'),
         ('done', 'Done'),
-    ], string='State', readonly=True, track_visibility='onchange',
+        ], string='State', readonly=True, track_visibility='onchange',
         copy=False, default='draft',
         help="State of the declaration. When the state is set to 'Done', "
         "the parameters become read-only.")
@@ -149,8 +149,8 @@ class IntrastatProductDeclaration(models.Model):
         string='Notes',
         help="You can add some comments here if you want.")
     reporting_level = fields.Selection(
-        '_get_reporting_level',
-        string='Reporting Level')
+        '_get_reporting_level', string='Reporting Level',
+        states={'done': [('readonly', True)]})
     valid = fields.Boolean(
         compute='_check_validity',
         string='Valid')
