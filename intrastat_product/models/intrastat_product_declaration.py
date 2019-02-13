@@ -883,7 +883,7 @@ class IntrastatProductComputationLine(models.Model):
         'intrastat.region', string='Intrastat Region')
     # extended declaration
     incoterm_id = fields.Many2one(
-        'stock.incoterms', string='Incoterm')
+        'account.incoterms', string='Incoterm')
     transport_id = fields.Many2one(
         'intrastat.transport_mode',
         string='Transport Mode')
@@ -965,7 +965,7 @@ class IntrastatProductDeclarationLine(models.Model):
         'intrastat.region', string='Intrastat Region')
     # extended declaration
     incoterm_id = fields.Many2one(
-        'stock.incoterms', string='Incoterm')
+        'account.incoterms', string='Incoterm')
     transport_id = fields.Many2one(
         'intrastat.transport_mode',
         string='Transport Mode')
